@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>五子棋</title>
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f3ede3; --ink:#2b2420; --muted:#8a7d70; --accent:#b4532a;
+    --panel:#fffaf2; --line:#e3d7c4;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"Noto Sans TC",system-ui,sans-serif;
+    display:flex; justify-content:center; padding:24px 16px 40px;
+  }
+  .wrap{width:100%;max-width:640px;display:flex;flex-direction:column;gap:14px}
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  h1{font-family:"Noto Serif TC",serif;font-weight:700;font-size:30px;margin:0;letter-spacing:.12em}
+  .status{font-size:15px;color:var(--muted);display:flex;align-items:center;gap:8px;min-height:24px}
+  .status b{color:var(--ink);font-weight:500}
+  .dot{width:14px;height:14px;border-radius:50%;display:inline-block;box-shadow:0 1px 2px rgba(0,0,0,.3);flex:none}
+  .dot.black{background:radial-gradient(circle at 35% 30%,#666,#111 60%)}
+  .dot.white{background:radial-gradient(circle at 35% 30%,#fff,#d8d2c8 70%)}
+  .status.win b{color:var(--accent)}
+
+  .panel{
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;
+  }
+  .panel.hidden,.hidden{display:none !important}
+  .seg{display:inline-flex;background:#efe6d8;border-radius:8px;padding:3px}
+  .seg button{
+    border:0;background:transparent;font:inherit;font-size:14px;color:var(--muted);
+    padding:6px 12px;border-radius:6px;cursor:pointer;
+  }
+  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .spacer{flex:1}
+  .btn{
+    border:1px solid var(--line);background:#fff;font:inherit;font-size:14px;color:var(--ink);
+    padding:7px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;
+  }
+  .btn:hover{border-color:#cdbca3}
+  .btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .btn.accent{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn:disabled{opacity:.4;cursor:default}
+  input.txt{
+    font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
+    background:#fff;color:var(--ink);min-width:0;
+  }
+  input.txt:focus{outline:2px solid #d9b98f;outline-offset:0}
+  label.f{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+  .code{font-family:ui-monospace,Menlo,monospace;font-size:16px;letter-spacing:.15em;color:var(--ink);font-weight:600}
+  .players{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--muted);width:100%}
+  .players .p{display:flex;align-items:center;gap:6px}
+  .players .p b{color:var(--ink);font-weight:500}
+  .players .me{font-size:11px;background:#efe6d8;border-radius:4px;padding:1px 5px;color:var(--muted)}
+  .note{font-size:13px;color:var(--muted);width:100%}
+  .note.err{color:var(--accent)}
+
+  .banner{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:#fff3e6;border:1px solid #f0cfa8;border-radius:10px;padding:8px 12px;font-size:14px;
+  }
+
+  .board-wrap{
+    position:relative;width:100%;aspect-ratio:1/1;border-radius:10px;
+    box-shadow:0 10px 30px rgba(80,50,20,.18),0 2px 6px rgba(80,50,20,.12);
+    overflow:hidden;
+  }
+  canvas{display:block;width:100%;height:100%;cursor:pointer;touch-action:manipulation}
+  .overlay{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(43,36,32,.35);backdrop-filter:blur(1px);
+  }
+  .overlay.show{display:flex}
+  .card{
+    background:var(--panel);border-radius:14px;padding:22px 28px;text-align:center;
+    box-shadow:0 10px 30px rgba(0,0,0,.2);
+  }
+  .card h2{font-family:"Noto Serif TC",serif;margin:0 0 6px;font-size:24px;letter-spacing:.08em}
+  .card p{margin:0 0 16px;color:var(--muted);font-size:14px}
+  .card .row{display:flex;gap:8px;justify-content:center}
+
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;font-size:14px;padding:9px 16px;border-radius:999px;
+    opacity:0;transition:.25s;pointer-events:none;z-index:10;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  footer{font-size:12px;color:var(--muted);line-height:1.7}
+  .info{display:flex;gap:16px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>五子棋</h1>
+    <div class="status" id="status"></div>
+  </header>
+
+  <div class="panel">
+    <div class="seg" id="modeSeg">
+      <button data-mode="ai" class="on">對電腦</button>
+      <button data-mode="pvp">同機雙人</button>
+      <button data-mode="online">連線對戰</button>
+    </div>
+    <div class="seg" id="sideSeg">
+      <button data-side="1" class="on">我執黑（先手）</button>
+      <button data-side="2">我執白</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="undoBtn">悔棋</button>
+    <button class="btn primary" id="newBtn">重新開始</button>
+  </div>
+
+  <!-- online: lobby -->
+  <div class="panel hidden" id="lobby">
+    <label class="f">暱稱 <input class="txt" id="nameIn" maxlength="12" placeholder="你的名字" style="width:120px"></label>
+    <label class="f">房間號碼 <input class="txt code" id="codeIn" maxlength="8" placeholder="例如 2468" inputmode="text" style="width:120px"></label>
+    <button class="btn primary" id="joinBtn">加入</button>
+    <button class="btn" id="randBtn">建立新房間</button>
+    <div class="note" id="lobbyNote">輸入同一組房間號碼的兩個人會配對成對手；第三位之後進來的人可以觀戰。</div>
+  </div>
+
+  <!-- online: in room -->
+  <div class="panel hidden" id="roomBar">
+    <span style="font-size:13px;color:var(--muted)">房間</span><span class="code" id="roomCode"></span>
+    <button class="btn" id="copyBtn">複製號碼</button>
+    <div class="spacer"></div>
+    <button class="btn" id="leaveBtn">離開房間</button>
+    <div class="players" id="players"></div>
+  </div>
+
+  <div class="banner hidden" id="undoBanner">
+    <span>對手請求悔棋</span>
+    <div class="spacer"></div>
+    <button class="btn" id="denyBtn">拒絕</button>
+    <button class="btn accent" id="acceptBtn">同意</button>
+  </div>
+
+  <div class="board-wrap">
+    <canvas id="board"></canvas>
+    <div class="overlay" id="overlay">
+      <div class="card">
+        <h2 id="resultTitle"></h2>
+        <p id="resultSub"></p>
+        <div class="row">
+          <button class="btn" id="reviewBtn">看棋盤</button>
+          <button class="btn primary" id="againBtn">再來一局</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info"><span id="moveCount">第 0 手</span><span id="score">黑 0 : 0 白</span></div>
+  <footer id="foot">規則：15×15 棋盤，黑棋先下，橫、直、斜任一方向先連成五子者獲勝（自由規則，無禁手）。</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const N = 15;
+  const EMPTY = 0, BLACK = 1, WHITE = 2;
+  const DIRS = [[1,0],[0,1],[1,1],[1,-1]];
+  const $ = id => document.getElementById(id);
+
+  const canvas = $('board');
+  const ctx = canvas.getContext('2d');
+  const statusEl = $('status');
+  const overlay = $('overlay');
+  const undoBtn = $('undoBtn'), newBtn = $('newBtn');
+
+  let board, history, turn, gameOver, winLine, hover = null, thinking = false;
+  let mode = 'ai';        // 'ai' | 'pvp' | 'online'
+  let humanSide = BLACK;
+  const wins = {1:0, 2:0};
+
+  const store = {
+    get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+    set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  };
+
+  function toast(msg){
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), 2200);
+  }
+
+  // ---------- layout ----------
+  let size = 0, cell = 0, pad = 0;
+  function resize(){
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    size = rect.width;
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    pad = size / (N + 1);
+    cell = (size - pad * 2) / (N - 1);
+    draw();
+  }
+  const px = i => pad + i * cell;
+
+  // ---------- drawing ----------
+  function drawBoardBg(){
+    const g = ctx.createLinearGradient(0,0,size,size);
+    g.addColorStop(0,'#e7c48d'); g.addColorStop(1,'#d9ae6c');
+    ctx.fillStyle = g; ctx.fillRect(0,0,size,size);
+    ctx.save(); ctx.globalAlpha = .06; ctx.strokeStyle = '#6b3f12';
+    for(let i=0;i<40;i++){
+      const y = (i/40)*size + Math.sin(i*1.7)*6;
+      ctx.lineWidth = 1 + (i%3);
+      ctx.beginPath(); ctx.moveTo(0,y);
+      ctx.bezierCurveTo(size*.3,y+8*Math.sin(i),size*.7,y-8*Math.cos(i),size,y+4);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(60,35,10,.75)';
+    ctx.lineWidth = 1;
+    for(let i=0;i<N;i++){
+      ctx.beginPath(); ctx.moveTo(px(0),px(i)); ctx.lineTo(px(N-1),px(i)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px(i),px(0)); ctx.lineTo(px(i),px(N-1)); ctx.stroke();
+    }
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px(0),px(0),cell*(N-1),cell*(N-1));
+    ctx.fillStyle = 'rgba(60,35,10,.85)';
+    for(const [x,y] of [[3,3],[11,3],[7,7],[3,11],[11,11]]){
+      ctx.beginPath(); ctx.arc(px(x),px(y),Math.max(2.5,cell*.1),0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  function drawStone(x,y,c,alpha=1){
+    const cx = px(x), cy = px(y), r = cell*.44;
+    ctx.save(); ctx.globalAlpha = alpha;
+    if(alpha === 1){
+      ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = cell*.15;
+      ctx.shadowOffsetX = cell*.04; ctx.shadowOffsetY = cell*.06;
+    }
+    const g = ctx.createRadialGradient(cx-r*.35,cy-r*.4,r*.1,cx,cy,r);
+    if(c === BLACK){ g.addColorStop(0,'#6a6a6a'); g.addColorStop(.55,'#1c1c1c'); g.addColorStop(1,'#050505'); }
+    else { g.addColorStop(0,'#ffffff'); g.addColorStop(.7,'#ece7de'); g.addColorStop(1,'#c9c1b4'); }
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function draw(){
+    if(!size) return;
+    drawBoardBg();
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++) if(board[y][x]) drawStone(x,y,board[y][x]);
+    const last = history[history.length-1];
+    if(last){
+      ctx.fillStyle = '#c8442a';
+      ctx.beginPath(); ctx.arc(px(last.x),px(last.y),cell*.11,0,Math.PI*2); ctx.fill();
+    }
+    if(winLine){
+      const a = winLine[0], b = winLine[winLine.length-1];
+      ctx.save();
+      ctx.strokeStyle = 'rgba(200,68,42,.9)'; ctx.lineWidth = Math.max(3,cell*.12); ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(px(a[0]),px(a[1])); ctx.lineTo(px(b[0]),px(b[1])); ctx.stroke();
+      ctx.restore();
+    }
+    if(hover && !gameOver && !thinking && canHumanMove() && board[hover.y][hover.x]===EMPTY){
+      drawStone(hover.x,hover.y,turn,.45);
+    }
+  }
+
+  // ---------- core rules ----------
+  const inB = (x,y) => x>=0 && y>=0 && x<N && y<N;
+
+  function clearBoard(){
+    board = Array.from({length:N},()=>Array(N).fill(EMPTY));
+    history = []; turn = BLACK; gameOver = false; winLine = null;
+  }
+
+  // places a stone for `turn`; returns 'win' | 'draw' | 'ok' | null
+  function applyMove(x,y){
+    if(gameOver || !inB(x,y) || board[y][x] !== EMPTY) return null;
+    board[y][x] = turn;
+    history.push({x,y,c:turn});
+    const line = checkWin(x,y,turn);
+    if(line){ gameOver = true; winLine = line; return 'win'; }
+    if(history.length === N*N){ gameOver = true; return 'draw'; }
+    turn = turn === BLACK ? WHITE : BLACK;
+    return 'ok';
+  }
+
+  function checkWin(x,y,c){
+    for(const [dx,dy] of DIRS){
+      const line = [[x,y]];
+      for(let s=1;s<5;s++){ const nx=x+dx*s, ny=y+dy*s; if(inB(nx,ny)&&board[ny][nx]===c) line.push([nx,ny]); else break; }
+      for(let s=1;s<5;s++){ const nx=x-dx*s, ny=y-dy*s; if(inB(nx,ny)&&board[ny][nx]===c) line.unshift([nx,ny]); else break; }
+      if(line.length >= 5) return line;
+    }
+    return null;
+  }
+
+  // ---------- local modes ----------
+  function resetLocal(){
+    clearBoard(); thinking = false;
+    overlay.classList.remove('show');
+    update(); draw(); maybeAI();
+  }
+
+  function localPlace(x,y){
+    const r = applyMove(x,y);
+    if(!r) return false;
+    if(r === 'win'){ wins[history[history.length-1].c]++; showResult(history[history.length-1].c); }
+    if(r === 'draw') showResult(0);
+    update(); draw();
+    return true;
+  }
+
+  function localUndo(){
+    if(thinking || !history.length) return;
+    if(gameOver && winLine){ wins[history[history.length-1].c]--; }
+    gameOver = false; winLine = null; overlay.classList.remove('show');
+    const pop = () => { const m = history.pop(); board[m.y][m.x] = EMPTY; turn = m.c; };
+    pop();
+    if(mode === 'ai') while(history.length && turn !== humanSide) pop();
+    update(); draw(); maybeAI();
+  }
+
+  // ---------- AI ----------
+  const PATTERNS = [
+    ['xxxxx', 1e7],
+    ['_xxxx_', 1e6],
+    ['xxxx_', 1e5], ['_xxxx', 1e5], ['xxx_x', 1e5], ['x_xxx', 1e5], ['xx_xx', 1e5],
+    ['__xxx_', 1e4], ['_xxx__', 1e4], ['_xx_x_', 8e3], ['_x_xx_', 8e3],
+    ['xxx__', 1e3], ['__xxx', 1e3], ['_xxx_', 1e3], ['xx_x_', 8e2], ['_x_xx', 8e2], ['xx__x', 6e2], ['x__xx', 6e2], ['x_x_x', 6e2],
+    ['__xx__', 5e2], ['_xx__', 3e2], ['__xx_', 3e2], ['_x_x_', 3e2], ['_x__x_', 2e2],
+    ['xx___', 50], ['___xx', 50], ['_x___', 10], ['___x_', 10],
+  ];
+  function lineString(x,y,dx,dy,c){
+    let s = '';
+    for(let k=-5;k<=5;k++){
+      if(k===0){ s+='x'; continue; }
+      const nx=x+dx*k, ny=y+dy*k;
+      if(!inB(nx,ny)) s+='o';
+      else { const v = board[ny][nx]; s += v===EMPTY?'_':(v===c?'x':'o'); }
+    }
+    return s;
+  }
+  function dirScore(x,y,dx,dy,c){
+    const s = lineString(x,y,dx,dy,c);
+    for(const [p,score] of PATTERNS){
+      const L = p.length;
+      for(let st=Math.max(0,5-L+1); st<=Math.min(5, s.length-L); st++){
+        if(s.substr(st,L) === p && p[5-st] === 'x') return score;
+      }
+    }
+    return 0;
+  }
+  function pointScore(x,y,c){ let t=0; for(const [dx,dy] of DIRS) t += dirScore(x,y,dx,dy,c); return t; }
+  function hasNeighbor(x,y,d=2){
+    for(let j=-d;j<=d;j++) for(let i=-d;i<=d;i++){
+      if(!i && !j) continue;
+      const nx=x+i, ny=y+j;
+      if(inB(nx,ny) && board[ny][nx]!==EMPTY) return true;
+    }
+    return false;
+  }
+  function aiMove(c){
+    if(!history.length) return {x:7,y:7};
+    const opp = c===BLACK?WHITE:BLACK;
+    let best = null, bestScore = -1;
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+      if(board[y][x]!==EMPTY || !hasNeighbor(x,y)) continue;
+      const atk = pointScore(x,y,c), def = pointScore(x,y,opp);
+      let sc = atk >= 1e7 ? 1e9 : def >= 1e7 ? 5e8 : atk*1.1 + def;
+      sc += (7 - Math.max(Math.abs(x-7),Math.abs(y-7))) * 0.5 + Math.random()*0.4;
+      if(sc > bestScore){ bestScore = sc; best = {x,y}; }
+    }
+    return best;
+  }
+  function maybeAI(){
+    if(mode!=='ai' || gameOver || turn===humanSide) return;
+    thinking = true; update();
+    setTimeout(()=>{
+      const m = aiMove(turn);
+      thinking = false;
+      if(m && mode==='ai') localPlace(m.x,m.y);
+      update(); draw();
+    }, 280);
+  }
+
+  // ---------- online (PeerJS, host-authoritative) ----------
+  // The first person to open a room code becomes the host (peer id = PREFIX + code) and keeps the
+  // canonical game state. Others connect to the host: the first one plays, the rest watch.
+  const PREFIX = 'satgomoku-v1-';
+  const net = {
+    peer: null, named: false, code: '', isHost: false, joining: false, connected: true,
+    // canonical / mirrored state
+    g: 0, moves: [], names: ['', ''], present: [false, false], ur: null, watchers: 0,
+    mySeat: -1, name: '',
+    hostConn: null,          // guest side
+    conns: [],               // host side: [{conn, seat, name}]
+    carry: null, shownEnd: ''
+  };
+  net.seats = { get length(){ return net.present.filter(Boolean).length; } };
+
+  function myColor(){ return net.mySeat < 0 ? 0 : seatColor(net.mySeat); }
+  function seatColor(i){ return (i + net.g) % 2 === 0 ? BLACK : WHITE; }
+
+  function loadMoves(list){
+    clearBoard();
+    for(const [x,y] of list){ if(!applyMove(x,y) || gameOver) break; }
+  }
+
+  // ----- host logic -----
+  function hostSnapshot(forSeat){
+    return { t:'state', g:net.g, m:net.moves, names:net.names.slice(), present:net.present.slice(),
+             ur:net.ur, w:net.watchers, seat:forSeat };
+  }
+  function hostRecount(){
+    const guest = net.conns.find(c => c.seat === 1);
+    net.present = [true, !!guest];
+    net.names[1] = guest ? guest.name : '';
+    net.watchers = net.conns.filter(c => c.seat < 0).length;
+  }
+  function hostBroadcast(){
+    hostRecount();
+    for(const c of net.conns){ try{ c.conn.send(hostSnapshot(c.seat)); }catch(e){} }
+    applyMirror(hostSnapshot(0));
+  }
+  function sendTo(seat, msg){
+    if(seat === 0){ handleHostMsg(msg); return; }
+    const c = net.conns.find(c => c.seat === seat);
+    if(c) try{ c.conn.send(msg); }catch(e){}
+  }
+  function handleHostMsg(msg){ if(msg.t === 'toast') toast(msg.msg); }
+
+  // an action from seat (0 = host itself, 1 = guest player)
+  function hostAction(seat, a){
+    if(!a || typeof a !== 'object') return;
+    if(seat !== 0 && seat !== 1) return;          // spectators can't act
+    loadMoves(net.moves);
+    const color = seatColor(seat);
+    if(a.t === 'move'){
+      if(!net.present[0] || !net.present[1] || gameOver || turn !== color) return;
+      const x = a.x|0, y = a.y|0;
+      if(!inB(x,y) || board[y][x] !== EMPTY) return;
+      net.moves = net.moves.concat([[x,y]]); net.ur = null;
+    } else if(a.t === 'undo'){
+      if(!history.some(m => m.c === color) || net.ur !== null) return;
+      net.ur = seat;
+    } else if(a.t === 'undoAns'){
+      if(net.ur === null || net.ur === seat) return;
+      const req = net.ur; net.ur = null;
+      if(a.ok){
+        const rc = seatColor(req), mv = net.moves.slice();
+        while(mv.length){ const removed = history[mv.length-1].c; mv.pop(); loadMoves(mv); if(removed === rc) break; }
+        net.moves = mv;
+      } else sendTo(req, {t:'toast', msg:'對手拒絕悔棋'});
+    } else if(a.t === 'restart'){
+      if(!gameOver) return;
+      net.g++; net.moves = []; net.ur = null;
+    } else return;
+    hostBroadcast();
+  }
+
+  function hostAccept(conn){
+    const entry = { conn, seat: -1, name: '' };
+    conn.on('open', () => {
+      entry.seat = net.conns.some(c => c.seat === 1) ? -1 : 1;
+      net.conns.push(entry);
+      hostBroadcast();
+    });
+    conn.on('data', d => {
+      if(!d || typeof d !== 'object') return;
+      if(d.t === 'hello'){ entry.name = String(d.name || '').slice(0,12); hostBroadcast(); return; }
+      hostAction(entry.seat, d);
+    });
+    const drop = () => {
+      const i = net.conns.indexOf(entry); if(i < 0) return;
+      net.conns.splice(i,1);
+      if(entry.seat === 1){
+        if(net.ur === 1) net.ur = null;
+        // promote the earliest spectator to player
+        const next = net.conns.find(c => c.seat < 0); if(next) next.seat = 1;
+      }
+      hostBroadcast();
+    };
+    conn.on('close', drop); conn.on('error', drop);
+  }
+
+  // ----- mirrored state (both sides render from this) -----
+  function applyMirror(s){
+    if(!s || s.t !== 'state') return;
+    const mv = Array.isArray(s.m) ? s.m.filter(p => Array.isArray(p) && inB(p[0]|0,p[1]|0)).map(p => [p[0]|0,p[1]|0]) : [];
+    net.g = s.g|0; net.moves = mv;
+    net.names = Array.isArray(s.names) ? s.names.map(n => String(n||'').slice(0,12)) : ['',''];
+    net.present = Array.isArray(s.present) ? s.present.map(Boolean) : [false,false];
+    net.ur = (s.ur === 0 || s.ur === 1) ? s.ur : null;
+    net.watchers = s.w|0;
+    net.mySeat = (s.seat === 0 || s.seat === 1) ? s.seat : -1;
+    net.carry = { code: net.code, g: net.g, moves: net.moves.slice(), color: myColor() };
+    loadMoves(net.moves);
+    onlineRefresh();
+  }
+
+  function onlineRefresh(){
+    const showReq = mode === 'online' && net.named && net.mySeat >= 0 && net.ur !== null && net.ur !== net.mySeat;
+    $('undoBanner').classList.toggle('hidden', !showReq);
+    const endKey = gameOver ? net.g + ':' + history.length : '';
+    if(endKey && endKey !== net.shownEnd){ net.shownEnd = endKey; showResult(winLine ? history[history.length-1].c : 0); }
+    if(!gameOver) overlay.classList.remove('show');
+    renderPlayers(); update(); draw();
+  }
+
+  // ----- actions from this page -----
+  function act(a){
+    if(net.isHost) hostAction(0, a);
+    else if(net.hostConn && net.hostConn.open) net.hostConn.send(a);
+    else toast('尚未連上房主');
+  }
+  function onlinePlace(x,y){ act({t:'move', x, y}); }
+  function requestUndo(){
+    if(!history.some(m => m.c === myColor())){ toast('你還沒下棋'); return; }
+    act({t:'undo'}); toast('已送出悔棋請求');
+  }
+  function acceptUndo(){ act({t:'undoAns', ok:true}); }
+  function denyUndo(){ act({t:'undoAns', ok:false}); }
+  function onlineRestart(){ act({t:'restart'}); }
+
+  // ----- connecting -----
+  function sanitizeCode(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,8); }
+  function lobbyNote(msg, err){ const n = $('lobbyNote'); n.textContent = msg; n.classList.toggle('err', !!err); }
+
+  function destroyPeer(){
+    try{ if(net.peer) net.peer.destroy(); }catch(e){}
+    net.peer = null; net.hostConn = null; net.conns = []; net.isHost = false;
+  }
+
+  function joinRoom(code){
+    code = sanitizeCode(code);
+    if(!code){ lobbyNote('請輸入房間號碼（英數字）', true); return; }
+    if(typeof Peer === 'undefined'){ lobbyNote('連線套件載入失敗，請檢查網路後重新整理頁面', true); return; }
+    if(net.joining) return;
+    net.name = ($('nameIn').value || '').trim().slice(0,12);
+    store.set('gomoku-name', net.name);
+    net.joining = true; net.code = code; net.tries = 0; lobbyNote('連線中…');
+    destroyPeer();
+    tryHost(code);
+  }
+
+  function tryHost(code){
+    const peer = new Peer(PREFIX + code);
+    net.peer = peer;
+    peer.on('open', () => {
+      // we are the host
+      net.isHost = true; net.joining = false; net.named = true; net.connected = true;
+      const c = net.carry && net.carry.code === code ? net.carry : null;
+      net.g = c ? c.g : 0; net.moves = c ? c.moves.slice() : []; net.ur = null; net.shownEnd = '';
+      // taking over mid-game: keep my colour (host is seat 0, colour depends on game-number parity)
+      if(c && c.color && seatColor(0) !== c.color) net.g++;
+      if(c){ loadMoves(net.moves); net.shownEnd = gameOver ? net.g + ':' + history.length : ''; }
+      net.names = [net.name, '']; net.mySeat = 0;
+      enterRoomUI();
+      hostBroadcast();
+    });
+    peer.on('connection', conn => { if(net.isHost) hostAccept(conn); else conn.close(); });
+    peer.on('disconnected', () => { if(net.isHost){ try{ peer.reconnect(); }catch(e){} } });
+    peer.on('error', err => {
+      if(err && err.type === 'unavailable-id' && !net.isHost){
+        // someone already hosts this room: join as guest
+        try{ peer.destroy(); }catch(e){}
+        if(++net.tries > 4){ connError({type:'loop'}); return; }
+        tryGuest(code);
+      } else connError(err);
+    });
+  }
+
+  function tryGuest(code){
+    const peer = new Peer();
+    net.peer = peer;
+    peer.on('open', () => {
+      const conn = peer.connect(PREFIX + code, { reliable: true });
+      net.hostConn = conn;
+      const timer = setTimeout(() => { if(!conn.open){ connError({type:'timeout'}); } }, 15000);
+      conn.on('open', () => {
+        clearTimeout(timer);
+        net.joining = false; net.named = true; net.connected = true; net.shownEnd = '';
+        conn.send({t:'hello', name: net.name});
+        enterRoomUI();
+      });
+      conn.on('data', d => {
+        if(d && d.t === 'state') applyMirror(d);
+        else if(d && d.t === 'toast') toast(String(d.msg||'').slice(0,40));
+      });
+      conn.on('close', () => { if(net.named && !net.isHost) hostLost(); });
+    });
+    peer.on('error', err => {
+      if(err && err.type === 'peer-unavailable'){
+        // the host just left; take over the room
+        try{ peer.destroy(); }catch(e){}
+        if(++net.tries > 4){ connError({type:'loop'}); return; }
+        tryHost(code);
+      } else connError(err);
+    });
+  }
+
+  function hostLost(){
+    net.connected = false; update();
+    toast('房主離線，嘗試接手房間…');
+    const code = net.code;
+    destroyPeer();
+    setTimeout(() => { if(mode === 'online' && net.code === code){ net.joining = true; net.tries = 0; tryHost(code); } }, 1500);
+  }
+
+  function connError(err){
+    const t = err && err.type;
+    net.joining = false;
+    const msg = t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed'
+      ? '連不上連線伺服器，請檢查網路（公司網路可能會擋）'
+      : t === 'browser-incompatible' ? '這個瀏覽器不支援連線，請改用新版 Chrome / Safari / Edge'
+      : t === 'loop' ? '房間狀態異常，請換一組房間號碼' : t === 'timeout' ? '連線逾時：可能是雙方網路環境無法直接互連，請換個網路試試'
+      : '連線失敗（' + (t || '未知錯誤') + '），請再試一次';
+    if(net.named){ toast(msg); net.connected = false; update(); }
+    else lobbyNote(msg, true);
+  }
+
+  function enterRoomUI(){
+    $('roomCode').textContent = net.code;
+    lobbyNote('輸入同一組房間號碼的兩個人會配對成對手；第三位之後進來的人可以觀戰。');
+    showOnlinePanels(); onlineRefresh();
+  }
+
+  async function leaveRoom(){
+    destroyPeer();
+    net.named = false; net.code = ''; net.mySeat = -1; net.present = [false,false]; net.carry = null; net.ur = null;
+    $('undoBanner').classList.add('hidden');
+    loadMoves([]); overlay.classList.remove('show');
+    showOnlinePanels(); update(); draw();
+  }
+
+  function renderPlayers(){
+    const box = $('players'); box.textContent = '';
+    for(let i=0;i<2;i++){
+      const d = document.createElement('span'); d.className = 'p';
+      const dot = document.createElement('span'); dot.className = 'dot ' + (seatColor(i)===BLACK?'black':'white');
+      const b = document.createElement('b');
+      b.textContent = net.present[i] ? (net.names[i] || (i===0 ? '房主' : '玩家 2')) : '等待對手加入…';
+      d.append(dot, b);
+      if(i === net.mySeat){ const m = document.createElement('span'); m.className='me'; m.textContent='你'; d.append(m); }
+      box.append(d);
+    }
+    if(net.watchers > 0){
+      const w = document.createElement('span'); w.className='p';
+      w.textContent = `觀戰 ${net.watchers} 人` + (net.named && net.mySeat < 0 ? '（含你）' : '');
+      box.append(w);
+    }
+  }
+
+  function showOnlinePanels(){
+    const on = mode === 'online';
+    $('lobby').classList.toggle('hidden', !on || !!net.named);
+    $('roomBar').classList.toggle('hidden', !on || !net.named);
+    $('sideSeg').classList.toggle('hidden', mode !== 'ai');
+    $('score').classList.toggle('hidden', on);
+    if(!on) $('undoBanner').classList.add('hidden');
+  }
+
+  // ---------- shared UI ----------
+  function colorName(c){ return c===BLACK?'黑棋':'白棋'; }
+
+  function canHumanMove(){
+    if(mode === 'pvp') return true;
+    if(mode === 'ai') return turn === humanSide;
+    return !!net.named && net.seats.length === 2 && net.mySeat >= 0 && turn === myColor();
+  }
+
+  function setStatus(c, text){
+    statusEl.textContent = '';
+    if(c){ const d = document.createElement('span'); d.className = 'dot ' + (c===BLACK?'black':'white'); statusEl.append(d); }
+    const b = document.createElement('b'); b.textContent = text; statusEl.append(b);
+  }
+
+  function update(){
+    $('moveCount').textContent = `第 ${history.length} 手`;
+    $('score').textContent = `黑 ${wins[1]} : ${wins[2]} 白`;
+    statusEl.classList.toggle('win', gameOver);
+
+    if(mode === 'online'){
+      const inRoom = !!net.named;
+      const seated = net.mySeat >= 0;
+      const waiting = net.ur !== null && net.ur === net.mySeat;
+      undoBtn.textContent = waiting ? '等待對方回應…' : '請求悔棋';
+      undoBtn.disabled = !inRoom || !seated || net.seats.length < 2 || waiting || net.ur !== null || !history.some(m => m.c === myColor());
+      newBtn.textContent = '再來一局';
+      newBtn.disabled = !inRoom || !seated || !gameOver;
+      if(!inRoom){ setStatus(0, '輸入房間號碼開始連線'); return; }
+      if(net.connected === false){ setStatus(0, '連線中斷，重新連線中…'); return; }
+      if(gameOver){
+        if(!winLine){ setStatus(0, '和局'); return; }
+        const c = history[history.length-1].c;
+        setStatus(c, seated ? (c === myColor() ? '你贏了' : '對手獲勝') : `${colorName(c)}獲勝`);
+        return;
+      }
+      if(net.seats.length < 2){ setStatus(0, '等待對手加入…'); return; }
+      if(!seated){ setStatus(turn, `觀戰中・輪到${colorName(turn)}`); return; }
+      setStatus(turn, turn === myColor() ? `輪到你（${colorName(turn)}）` : `等待對手（${colorName(turn)}）`);
+      return;
+    }
+
+    undoBtn.textContent = '悔棋';
+    newBtn.textContent = '重新開始';
+    newBtn.disabled = false;
+    undoBtn.disabled = !history.length || thinking;
+    if(gameOver){
+      if(winLine){ const c = history[history.length-1].c; setStatus(c, `${colorName(c)}獲勝`); }
+      else setStatus(0, '和局');
+      return;
+    }
+    if(mode==='ai') setStatus(turn, turn===humanSide ? `輪到你（${colorName(turn)}）` : (thinking ? '電腦思考中…' : `電腦（${colorName(turn)}）`));
+    else setStatus(turn, `輪到${colorName(turn)}`);
+  }
+
+  function showResult(c){
+    const t = $('resultTitle'), s = $('resultSub');
+    const againBtn = $('againBtn');
+    againBtn.classList.remove('hidden');
+    if(!c){ t.textContent='和局'; s.textContent='棋盤下滿了'; }
+    else if(mode==='ai'){ t.textContent = c===humanSide ? '你贏了' : '電腦獲勝'; s.textContent = `${colorName(c)}連成五子・共 ${history.length} 手`; }
+    else if(mode==='online'){
+      if(net.mySeat >= 0){ t.textContent = c===myColor() ? '你贏了' : '對手獲勝'; s.textContent = `共 ${history.length} 手・再來一局會交換黑白`; }
+      else { t.textContent = `${colorName(c)}獲勝`; s.textContent = `共 ${history.length} 手`; againBtn.classList.add('hidden'); }
+    }
+    else { t.textContent = `${colorName(c)}獲勝`; s.textContent = `共 ${history.length} 手`; }
+    setTimeout(()=>{ if(gameOver) overlay.classList.add('show'); }, 350);
+  }
+
+  function evtToCell(e){
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.round(((e.clientX-rect.left) - pad)/cell);
+    const y = Math.round(((e.clientY-rect.top) - pad)/cell);
+    return inB(x,y) ? {x,y} : null;
+  }
+
+  canvas.addEventListener('pointermove', e => {
+    if(e.pointerType !== 'mouse') return;
+    const c = evtToCell(e);
+    if((c&&hover&&c.x===hover.x&&c.y===hover.y) || (!c&&!hover)) return;
+    hover = c; draw();
+  });
+  canvas.addEventListener('pointerleave', ()=>{ hover=null; draw(); });
+  canvas.addEventListener('click', e => {
+    if(gameOver || thinking || !canHumanMove()) return;
+    const c = evtToCell(e); if(!c) return;
+    if(mode === 'online') onlinePlace(c.x,c.y);
+    else if(localPlace(c.x,c.y)) maybeAI();
+  });
+
+  function bindSeg(id, attr, fn){
+    const seg = $(id);
+    seg.addEventListener('click', e=>{
+      const b = e.target.closest('button'); if(!b) return;
+      seg.querySelectorAll('button').forEach(x=>x.classList.toggle('on', x===b));
+      fn(b.dataset[attr]);
+    });
+  }
+  bindSeg('modeSeg','mode', async v => {
+    if(v === mode) return;
+    if(mode === 'online' && net.named) await leaveRoom();
+    mode = v;
+    wins[1]=wins[2]=0;
+    showOnlinePanels();
+    $('foot').textContent = '規則：15×15 棋盤，黑棋先下，橫、直、斜任一方向先連成五子者獲勝（自由規則，無禁手）。' +
+      (mode==='online' ? '連線模式：先進房的人第一局執黑，之後每局交換黑白；悔棋需對手同意。' :
+       mode==='ai' ? '對電腦模式悔棋會一次退回兩手。' : '');
+    if(mode === 'online'){ loadMoves([]); overlay.classList.remove('show'); update(); draw(); }
+    else resetLocal();
+  });
+  bindSeg('sideSeg','side', v => { humanSide = +v; wins[1]=wins[2]=0; resetLocal(); });
+
+  newBtn.onclick = () => mode === 'online' ? onlineRestart() : resetLocal();
+  $('againBtn').onclick = () => mode === 'online' ? onlineRestart() : resetLocal();
+  $('reviewBtn').onclick = ()=>overlay.classList.remove('show');
+  undoBtn.onclick = () => mode === 'online' ? requestUndo() : localUndo();
+  $('acceptBtn').onclick = acceptUndo;
+  $('denyBtn').onclick = denyUndo;
+
+  $('joinBtn').onclick = () => joinRoom($('codeIn').value);
+  $('codeIn').addEventListener('keydown', e => { if(e.key === 'Enter') joinRoom($('codeIn').value); });
+  $('randBtn').onclick = () => {
+    const code = String(Math.floor(1000 + Math.random()*9000));
+    $('codeIn').value = code; joinRoom(code);
+  };
+  $('leaveBtn').onclick = leaveRoom;
+  $('copyBtn').onclick = () => {
+    try{
+      navigator.clipboard.writeText(net.code).then(()=>toast('已複製房間號碼'), ()=>toast('無法複製，請手動記下：' + net.code));
+    }catch(e){ toast('無法複製，請手動記下：' + net.code); }
+  };
+
+  $('nameIn').value = store.get('gomoku-name') || '';
+
+  window.addEventListener('resize', resize);
+  resetLocal();
+  resize();
+})();
+</script>
+</body>
+</html>
